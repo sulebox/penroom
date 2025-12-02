@@ -1,0 +1,676 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Penguin Room — Shifupen</title>
+  <style>
+    /* --- ベーススタイル --- */
+    html, body { height: 100%; margin: 0; background: #f6e6c9; touch-action: manipulation; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Meiryo, sans-serif; overflow: hidden; }
+    #app { position: fixed; inset: 0; z-index: 1; }
+    
+    /* ステータス・HUD */
+    .status { position: fixed; left: 12px; top: 12px; padding: 6px 8px; background: rgba(0,0,0,.6); color: #fff; border-radius: 8px; font-size: 12px; z-index: 10; pointer-events: none; }
+    
+    /* 吹き出し */
+    .bubble { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -100%); padding: 6px 10px; background: rgba(255,255,255,.95); border-radius: 12px; border: 1px solid #ccc; box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 12px; pointer-events: none; transition: opacity .2s; z-index: 5; white-space: nowrap; }
+    .bubble::after { content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); border-width: 6px 5px 0; border-style: solid; border-color: rgba(255,255,255,0.95) transparent transparent transparent; }
+
+    /* --- チャットUI (下部に固定) --- */
+    #chat-interface {
+      position: fixed; bottom: 0; left: 0; width: 100%; height: 35%;
+      pointer-events: none; z-index: 20;
+      display: flex; flex-direction: column; justify-content: flex-end;
+      padding-bottom: env(safe-area-inset-bottom, 20px);
+    }
+    #chat-log {
+      flex: 1; overflow-y: auto; padding: 10px 20px;
+      pointer-events: auto;
+      background: linear-gradient(to top, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 100%);
+      mask-image: linear-gradient(to bottom, transparent, black 20%);
+      -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%);
+    }
+    .msg { margin-bottom: 8px; font-size: 14px; line-height: 1.4; max-width: 80%; padding: 8px 12px; border-radius: 12px; animation: fadeIn 0.3s ease; }
+    .msg.user { margin-left: auto; background: #4db6ac; color: white; border-bottom-right-radius: 2px; }
+    .msg.penguin { margin-right: auto; background: #fff; color: #333; border: 1px solid #ddd; border-bottom-left-radius: 2px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    
+    #input-area {
+      pointer-events: auto;
+      background: #fff; padding: 10px 15px;
+      display: flex; gap: 10px; align-items: center;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    }
+    #chat-input {
+      flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 24px; font-size: 16px; outline: none; transition: border-color 0.2s;
+    }
+    #chat-input:focus { border-color: #4db6ac; }
+    #send-btn {
+      background: #4db6ac; color: white; border: none; padding: 0 20px; height: 44px; border-radius: 22px; font-weight: bold; cursor: pointer; transition: transform 0.1s;
+    }
+    #send-btn:active { transform: scale(0.95); }
+    #send-btn:disabled { background: #ccc; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="status" id="status">初期化中…</div>
+
+  <div id="chat-interface">
+    <div id="chat-log">
+      <div class="msg penguin">こんこん＾＾</div>
+    </div>
+    <form id="input-area">
+      <input type="text" id="chat-input" placeholder="シフペンに話しかける..." autocomplete="off" />
+      <button type="submit" id="send-btn">送信</button>
+    </form>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // ---- Imports ----
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/DRACOLoader.js';
+    import { KTX2Loader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/KTX2Loader.js';
+    import { MeshoptDecoder } from 'https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.module.js';
+    
+    // ---- Helpers ----
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (m) => { const st=$('status'); if(st){ st.textContent = m; } console.log(m); };
+
+    // ---- Renderer / Scene ----
+    const app = $('app');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xF8EBD5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    app.appendChild(renderer.domElement);
+
+    // ---- Camera ----
+    let aspect = window.innerWidth / window.innerHeight;
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+    camera.position.set(14, 16, 14);
+    camera.lookAt(0, 0, 0);
+
+    function updateCameraMode(){
+      const frustumSize = 22;
+      aspect = window.innerWidth / window.innerHeight;
+      camera.left = -frustumSize * aspect / 2;
+      camera.right = frustumSize * aspect / 2;
+      camera.top = frustumSize / 2;
+      camera.bottom = -frustumSize / 2;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener('resize', updateCameraMode);
+
+    // ---- Lights ----
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xf2d8a8, 0.85));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(5, 10, 2);
+    scene.add(dir);
+
+    // ---- Room (オリジナルのお部屋構造) ----
+    const room = new THREE.Group();
+    scene.add(room);
+    const floorGeo = new THREE.PlaneGeometry(18, 14);
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0xF4D9A0, roughness: 0.95 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    room.add(floor);
+
+    const wallH = 5, wallT = 0.3;
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0xF7CD8F });
+    const mkWall = (w,h,t) => new THREE.Mesh(new THREE.BoxGeometry(w,h,t), wallMat);
+
+    // 壁
+    const back = mkWall(18, wallH, wallT); back.position.set(0, wallH/2, -7); room.add(back);
+
+    // 右壁＋窓
+    const rightGroup = new THREE.Group(); room.add(rightGroup); const rightX = 9;
+    const beamMat = new THREE.MeshStandardMaterial({ color: 0xE9A86B });
+    const beamT = wallT;
+    const frameTop = new THREE.Mesh(new THREE.BoxGeometry(beamT, 0.4, 13), beamMat); frameTop.position.set(rightX, 4.2, 0); rightGroup.add(frameTop);
+    const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(beamT, 0.4, 13), beamMat); frameBottom.position.set(rightX, 1.6, 0); rightGroup.add(frameBottom);
+    const frameLeft = new THREE.Mesh(new THREE.BoxGeometry(beamT, 2.2, 0.3), beamMat); frameLeft.position.set(rightX, 2.9, -6.5); rightGroup.add(frameLeft);
+    const frameRight = new THREE.Mesh(new THREE.BoxGeometry(beamT, 2.2, 0.3), beamMat); frameRight.position.set(rightX, 2.9, 6.5); rightGroup.add(frameRight);
+    const rightTopWall = new THREE.Mesh(new THREE.BoxGeometry(beamT, 0.5, 14), wallMat); rightTopWall.position.set(rightX, 4.75, 0); room.add(rightTopWall);
+    const rightBottomWall = new THREE.Mesh(new THREE.BoxGeometry(beamT, 0.5, 14), wallMat); rightBottomWall.position.set(rightX, 1.0, 0); room.add(rightBottomWall);
+
+    updateCameraMode();
+    // ガラス壁
+    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0xA7D0FF, transmission: 0.9, thickness: 0.02, roughness: 0.1, transparent: true, opacity: 0.6 });
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(0.02, 2.2, 13), glassMat); glass.position.set(rightX - 0.02, 2.9, 0); rightGroup.add(glass);
+
+    // ---- Garden (拡張) ----
+    const garden = new THREE.Group(); scene.add(garden);
+    const lawnMat = new THREE.MeshStandardMaterial({ color: 0xCDE7B0, roughness: 0.95 });
+    const frontLawn = new THREE.Mesh(new THREE.PlaneGeometry(18, 8), lawnMat); frontLawn.rotation.x = -Math.PI/2; frontLawn.position.set(0, 0, 11); garden.add(frontLawn);
+    const leftLawn  = new THREE.Mesh(new THREE.PlaneGeometry(8, 14), lawnMat); leftLawn.rotation.x = -Math.PI/2; leftLawn.position.set(-13, 0, 0); garden.add(leftLawn);
+    const rightLawn = new THREE.Mesh(new THREE.PlaneGeometry(8, 14), lawnMat); rightLawn.rotation.x = -Math.PI/2; rightLawn.position.set(13, 0, 0); garden.add(rightLawn);
+    const rightFrontLawn = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), lawnMat); rightFrontLawn.rotation.x = -Math.PI/2; rightFrontLawn.position.set(13, 0, 11); garden.add(rightFrontLawn);
+    const leftFrontLawn = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), lawnMat); leftFrontLawn.rotation.x = -Math.PI/2; leftFrontLawn.position.set(-13, 0, 11); garden.add(leftFrontLawn);
+
+    // tree
+    const tree = new THREE.Group(); garden.add(tree); tree.position.set(-12, 0, 3.5);
+    tree.scale.setScalar(1.5); 
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 12), new THREE.MeshStandardMaterial({ color: 0x8D6E63 })); trunk.position.y = 1.1; tree.add(trunk);
+    const crown1 = new THREE.Mesh(new THREE.SphereGeometry(1.2, 16, 12), new THREE.MeshStandardMaterial({ color: 0x7CB342 })); crown1.position.y = 2.2; tree.add(crown1);
+    const crown2 = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 12), new THREE.MeshStandardMaterial({ color: 0x8BC34A })); crown2.position.set(0.9, 2.9, 0.2); tree.add(crown2);
+
+    // pond
+    const pond = new THREE.Group(); garden.add(pond);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.3, 0.12, 48, 1, true), new THREE.MeshStandardMaterial({ color: 0xA1887F })); rim.position.set(-2.0, 0.06, 10.0); pond.add(rim);
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.1, 0.05, 48), new THREE.MeshStandardMaterial({ color: 0xB3E5FF, roughness: 0.25, metalness: 0 })); water.position.set(-2.0, 0.081, 10.0); water.renderOrder = 2; pond.add(water);
+    const POND_POS = water.position.clone();
+    
+    // pond effects
+    const droplets = [];
+    const dropletGeo = new THREE.SphereGeometry(0.06, 10, 8);
+    const dropletBaseMat = new THREE.MeshStandardMaterial({ color: 0xB3E5FF, metalness:0, roughness:0.2, transparent:true, opacity:0.9 });
+    function spawnSplash(pos, count=6){
+      for(let i=0;i<count;i++){
+        const m = new THREE.Mesh(dropletGeo, dropletBaseMat.clone());
+        m.position.copy(pos).add(new THREE.Vector3((Math.random()-0.5)*0.4, 0.1, (Math.random()-0.5)*0.4));
+        m.userData = { vel: new THREE.Vector3((Math.random()-0.5)*1.2, 1.5+Math.random()*0.8, (Math.random()-0.5)*1.2), life: 0.7 };
+        scene.add(m);
+        droplets.push(m);
+      }
+    }
+
+    // ---- Toys & props ----
+    const toys = new THREE.Group(); scene.add(toys);
+    const RING_X = 4.0, RING_Z = -3.0;
+    const addBlock = (x,z,color) => { const m = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.9,0.9), new THREE.MeshStandardMaterial({ color })); m.position.set(x,0.45,z); toys.add(m); return m; };
+    const blocks = [];
+    blocks.push(addBlock(-4,-2,0xf9a825));
+    blocks.push(addBlock(-5,-1,0x4fc3f7));
+    blocks.push(addBlock(-3,-1,0x81c784));
+    const BLOCKS_POS = new THREE.Vector3(
+      (blocks[0].position.x + blocks[1].position.x + blocks[2].position.x)/3, 0,
+      (blocks[0].position.z + blocks[1].position.z + blocks[2].position.z)/3
+    );
+
+    const ring = (radius, y, color) => { const g=new THREE.TorusGeometry(radius,0.15,12,32); const m=new THREE.MeshStandardMaterial({ color }); const t=new THREE.Mesh(g,m); t.rotation.x=Math.PI/2; t.position.set(RING_X, y, RING_Z); toys.add(t); return t; };
+    ring(0.8, 0.35, 0xff8a65); ring(0.65, 0.55, 0x4db6ac); ring(0.5, 0.75, 0x9575cd);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,1.2,16), new THREE.MeshStandardMaterial({ color: 0xd7ccc8 })); pole.position.set(RING_X,0.6,RING_Z); toys.add(pole);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.7,0.2,20), new THREE.MeshStandardMaterial({ color: 0xef9a9a })); base.position.set(RING_X,0.1,RING_Z); toys.add(base);
+
+    const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.1, 24), new THREE.MeshStandardMaterial({ color: 0x90caf9 })); dish.position.set(2, 0.05, 2); scene.add(dish);
+
+    // ---- Bed ----
+    const bed = new THREE.Group(); scene.add(bed);
+    const bedX = -4.8, bedZ = 5.2;
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0xC18E66 });
+    const fabricMat = new THREE.MeshStandardMaterial({ color: 0xEDE7F6 });
+    const blanketMat = new THREE.MeshStandardMaterial({ color: 0x9bd0ff });
+    const bedBase = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.25, 1.8), woodMat); bedBase.position.set(bedX, 0.125, bedZ); bed.add(bedBase);
+    const headBoard = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.6, 0.12), woodMat); headBoard.position.set(bedX, 0.55, bedZ - 0.95); bed.add(headBoard);
+    const mattress = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.22, 1.6), fabricMat); mattress.position.set(bedX, 0.36, bedZ); bed.add(mattress);
+    const blanket = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.12, 1.2), blanketMat); blanket.position.set(bedX + 0.2, 0.48, bedZ + 0.05); bed.add(blanket);
+    const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.45), new THREE.MeshStandardMaterial({ color: 0xffffff })); pillow.position.set(bedX - 1.3, 0.5, bedZ + 0.0); pillow.rotation.y = Math.PI / 2; bed.add(pillow);
+    const BED_SLEEP = { x: bedX - 0.9, z: bedZ - 0.45, y: 0.55 };
+
+    // ---- Mobile toy (モビール) ----
+    const mobile = new THREE.Group(); scene.add(mobile); mobile.position.set(-5, 3.8, -4.5);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,1.2,12), new THREE.MeshStandardMaterial({ color: 0xd7ccc8 })); rod.rotation.z = Math.PI/2; mobile.add(rod);
+    const stringMat = new THREE.MeshStandardMaterial({ color: 0xd7ccc8 });
+    const makeFish = () => { const fish = new THREE.Group(); const body = new THREE.Mesh(new THREE.SphereGeometry(0.18,16,12), new THREE.MeshStandardMaterial({ color: 0x64b5f6 })); body.scale.set(1.5,1,1); fish.add(body); const tail = new THREE.Mesh(new THREE.ConeGeometry(0.18,0.3,16), new THREE.MeshStandardMaterial({ color: 0xffcc80 })); tail.rotation.z = Math.PI/2; tail.position.set(-0.35,0,0); fish.add(tail); const eye = new THREE.Mesh(new THREE.SphereGeometry(0.04,10,8), new THREE.MeshStandardMaterial({ color: 0x222 })); eye.position.set(0.2,0.08,0.12); fish.add(eye); return fish; };
+    const hangFish = (oz) => { const s = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,1.0,8), stringMat); s.position.set(0,-0.5,oz); mobile.add(s); const f = makeFish(); f.position.set(0,-1.1,oz); mobile.add(f); return f; };
+    const mf1 = hangFish(-0.35), mf2 = hangFish(0), mf3 = hangFish(0.35);
+
+
+    // ---- Resource queues ----
+    const RES = {
+      play:  { holder: null, queue: [], pos: new THREE.Vector3(RING_X, 0, RING_Z), waitDir: new THREE.Vector3(-1,0,0) },
+      playBlocks: { holder: null, queue: [], pos: BLOCKS_POS.clone(), waitDir: new THREE.Vector3(-1,0,0) },
+      eat:   { holder: null, queue: [], pos: dish.position.clone(), waitDir: new THREE.Vector3(-1,0,0) },
+      sleep: { holder: null, queue: [], pos: new THREE.Vector3(BED_SLEEP.x, 0, BED_SLEEP.z), waitDir: new THREE.Vector3(1,0,0) },
+      pond:  { holder: null, queue: [], pos: POND_POS.clone(), waitDir: new THREE.Vector3(1,0,0) },
+      neco:  { holder: null, queue: [], pos: new THREE.Vector3(-11.2,0,2.5), waitDir: new THREE.Vector3(1,0,0) }
+    };
+    function requestResource(p, name){ const r = RES[name]; if(!r.holder){ r.holder = p; return true; } if(!r.queue.includes(p)) r.queue.push(p); return false; }
+    function releaseResource(name){ const r = RES[name]; if(r.holder) r.holder = null; const next = r.queue.shift(); if(next) setState(next, name); }
+    function dequeueAll(p){
+      ['play','playBlocks','eat','sleep','pond','neco'].forEach((name)=>{
+        const r = RES[name]; if(!r) return;
+        const i = r.queue.indexOf(p);
+        if (i >= 0) r.queue.splice(i, 1);
+        if (r.holder === p) { r.holder = null; const next = r.queue.shift(); if (next) setState(next, name); }
+      });
+    }
+    function queueWaitPos(name, p){
+      const r = RES[name]; const base = (r && r.pos) ? r.pos.clone() : new THREE.Vector3(); const dir = (r && r.waitDir) ? r.waitDir.clone() : new THREE.Vector3(1,0,0); const idx = r && r.queue ? r.queue.indexOf(p) : -1; const k = (idx >= 0 ? idx + 1 : ((r && r.queue ? r.queue.length : 0) + 1)); const off = dir.multiplyScalar(0.7 * k); return base.add(off);
+    }
+
+    // ---- GLTF loader ----
+    let penguin = null; const penguins = [];
+    const gltfLoader = new GLTFLoader();
+    const draco = new DRACOLoader();
+    draco.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
+    gltfLoader.setDRACOLoader(draco);
+    const ktx2 = new KTX2Loader().setTranscoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/');
+    ktx2.detectSupport(renderer);
+    gltfLoader.setKTX2Loader(ktx2);
+    gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+
+    const bounds = { xMin: -16, xMax: 17, zMin: -7, zMax: 15 };
+    const targetHeight = 2.2;
+    const HEADING_OFFSET = Math.PI;
+
+    // ---- Bubbles (独り言の辞書) ----
+    const commentMap = {
+      wander: 'おさんぽしよっと',
+      lounge: 'ちょとつかれた',
+      play:   'あそぼっと',
+      playBlocks: 'あそぼっと',
+      eat:    'おなかすいた',
+      window: 'そとなにあるかな',
+      sleep:  'もうねよっと',
+      wake:   '',
+      sit:    'ちょときゅうけい',
+      pond:   'ちょとあつい',
+      neco:   'ネコみよっと'
+    };
+    function ensureBubble(p){ if (!p.userData.bubbleEl) { const el = document.createElement('div'); el.className='bubble'; document.body.appendChild(el); p.userData.bubbleEl = el; } return p.userData.bubbleEl; }
+    
+    // バブルにテキストをセットする（状態に応じた独り言、またはチャットの返答）
+    function setBubbleText(p, text) {
+        const el = ensureBubble(p);
+        el.textContent = text || '';
+        el.style.opacity = text ? 1 : 0;
+    }
+
+    function updateBubblePositionFor(p){
+      const el = p.userData.bubbleEl; if (!el) return;
+      // 表示がないときは計算しない
+      if (el.style.opacity == 0) return;
+      const offY = (p.userData && typeof p.userData.bubbleOffsetY === 'number') ? p.userData.bubbleOffsetY : 2.6;
+      const world = p.position.clone().add(new THREE.Vector3(0, offY, 0));
+      const q = world.project(camera);
+      el.style.left = (q.x*0.5+0.5)*window.innerWidth+'px';
+      el.style.top  = (-q.y*0.5+0.5)*window.innerHeight+'px';
+    }
+
+    // ---- Penguin Logic ----
+    function fitAndFloor(model) {
+      const tmp = new THREE.Group(); tmp.add(model); scene.add(tmp);
+      tmp.updateWorldMatrix(true,true);
+      const box = new THREE.Box3().setFromObject(tmp);
+      const size = new THREE.Vector3(); box.getSize(size);
+      const s = (size.y>0? targetHeight/size.y : 1);
+      model.scale.setScalar(s);
+      tmp.updateWorldMatrix(true,true);
+      const box2 = new THREE.Box3().setFromObject(tmp);
+      model.position.y += -box2.min.y;
+      scene.remove(tmp);
+      return model;
+    }
+
+    async function loadPenguin(url) {
+      setStatus('loading ' + url + ' ...');
+      return new Promise((resolve, reject) => {
+        gltfLoader.load(url, (gltf) => {
+          const st=$('status'); if(st){ st.textContent=''; st.style.display='none'; }
+          const root = new THREE.Group();
+          const model = gltf.scene;
+          model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          fitAndFloor(model);
+          root.add(model);
+          let mixer = null;
+          if (gltf.animations && gltf.animations.length) {
+            mixer = new THREE.AnimationMixer(model);
+            mixer.clipAction(gltf.animations[0]).play();
+          }
+          root.userData = { speed: 0, state: 'idle', target: new THREE.Vector3(), timer: 0, mixer, model, goingToBed: false };
+          resolve(root);
+        }, undefined, (err) => { console.error('GLB load error:', err); setStatus('GLB load error: ' + (err?.message || err)); reject(err); });
+      });
+    }
+
+    // --- Pathfinding helpers ---
+    function randomPointNear(x0, z0, r=5) {
+      const x = THREE.MathUtils.clamp(x0 + (Math.random()*2-1)*r, bounds.xMin, bounds.xMax);
+      const z = THREE.MathUtils.clamp(z0 + (Math.random()*2-1)*r, bounds.zMin, bounds.zMax);
+      return new THREE.Vector3(x,0,z);
+    }
+    const RIGHT_WALL_X = 9.0, RIGHT_WALL_Z_MIN = -6.5, RIGHT_WALL_Z_MAX = 6.5, GATE_EPS = 0.35;
+    const GATE_FRONT_Z = RIGHT_WALL_Z_MAX + 0.2, GATE_BACK_Z  = RIGHT_WALL_Z_MIN - 0.2;
+    function pathAroundRightWall(from, to){
+      const crosses = ((from.x <= RIGHT_WALL_X && to.x > RIGHT_WALL_X) || (from.x >= RIGHT_WALL_X && to.x < RIGHT_WALL_X));
+      const zInBand = (z)=> (z > RIGHT_WALL_Z_MIN && z < RIGHT_WALL_Z_MAX);
+      if (!crosses || !zInBand(from.z) || !zInBand(to.z)) return null;
+      const insideX = RIGHT_WALL_X - GATE_EPS, outsideX = RIGHT_WALL_X + GATE_EPS;
+      const frontIn  = new THREE.Vector3(insideX,0,GATE_FRONT_Z), frontOut = new THREE.Vector3(outsideX,0,GATE_FRONT_Z);
+      const backIn   = new THREE.Vector3(insideX,0,GATE_BACK_Z),  backOut  = new THREE.Vector3(outsideX,0,GATE_BACK_Z);
+      const frontLen = from.distanceTo(frontIn)+frontIn.distanceTo(frontOut)+frontOut.distanceTo(to);
+      const backLen  = from.distanceTo(backIn)+backIn.distanceTo(backOut)+backOut.distanceTo(to);
+      return (frontLen <= backLen) ? [frontIn, frontOut] : [backIn, backOut];
+    }
+    function setRoute(p, dest){
+      const via = pathAroundRightWall(p.position, dest);
+      p.userData.way = [];
+      if (via && via.length){ p.userData.way = [...via, dest.clone()]; p.userData.target.copy(p.userData.way.shift()); }
+      else { p.userData.target.copy(dest); }
+    }
+
+    // --- State Machine ---
+    function chooseNextAction(p){
+      if (!p) return; const r = Math.random();
+      if (r < 0.27) setState(p,'wander');
+      else if (r < 0.42) setState(p,'lounge');
+      else if (r < 0.49) setState(p,'play');
+      else if (r < 0.57) setState(p,'playBlocks');
+      else if (r < 0.72) setState(p,'eat');
+      else if (r < 0.80) setState(p,'pond');
+      else if (r < 0.90) setState(p,'neco');
+      else if (r < 0.95) setState(p,'window');
+      else if (r < 0.98) setState(p,'sleep');
+      else setState(p,'sit');
+    }
+
+    function setState(p, state){
+      if(!p) return;
+      const ud = p.userData; dequeueAll(p);
+      ud.timer = 0; ud.arrived = false;
+      let final = state; let bubbleText = commentMap[state];
+
+      if(state === 'wander'){ const dest = randomPointNear(p.position.x, p.position.z, 6); setRoute(p, dest); ud.speed = 0.9 + Math.random()*0.4; }
+      else if(state === 'lounge'){ ud.speed = 0; }
+      else if(state === 'play'){
+        ud.speed = 0.8;
+        if (requestResource(p,'play')) { setRoute(p, new THREE.Vector3(RING_X,0,RING_Z)); }
+        else { final = 'playWait'; setRoute(p, queueWaitPos('play',p)); bubbleText = commentMap['play']; }
+      }
+      else if(state === 'playBlocks'){
+        ud.speed = 0.8;
+        if (requestResource(p,'playBlocks')) { setRoute(p, BLOCKS_POS.clone()); }
+        else { final = 'playBlocksWait'; setRoute(p, queueWaitPos('playBlocks',p)); bubbleText = commentMap['playBlocks']; }
+      }
+      else if(state === 'eat'){
+        ud.speed = 1.0;
+        if (requestResource(p,'eat')) { setRoute(p, dish.position.clone().add(new THREE.Vector3(-0.9,0,0))); }
+        else { final = 'eatWait'; setRoute(p, queueWaitPos('eat',p)); bubbleText = commentMap['eat']; }
+      }
+      else if(state === 'pond'){
+        ud.speed = 1.0;
+        if (requestResource(p,'pond')) { setRoute(p, POND_POS.clone()); }
+        else { final = 'pondWait'; setRoute(p, queueWaitPos('pond',p)); bubbleText = commentMap['pond']; }
+      }
+      else if(state === 'neco'){
+        ud.speed = 1.0;
+        if (necoRef){
+          if (requestResource(p,'neco')){
+            const base = (RES.neco && RES.neco.pos) ? RES.neco.pos : new THREE.Vector3(-11.2,0,2.5);
+            const dest = base.clone().add(new THREE.Vector3(1.0,0,0));
+            setRoute(p, dest);
+          } else { final = 'necoWait'; setRoute(p, queueWaitPos('neco',p)); bubbleText = commentMap['neco']; }
+        } else { final = 'wander'; setRoute(p, randomPointNear(p.position.x, p.position.z, 5)); }
+      }
+      else if(state === 'window'){ ud.speed = 1.0; setRoute(p, new THREE.Vector3(7.4,0,0)); }
+      else if(state === 'sit'){ ud.speed = 0; }
+      else if(state === 'sleep'){
+        ud.speed = 1.0;
+        if (requestResource(p,'sleep')) { setRoute(p, new THREE.Vector3(BED_SLEEP.x, 0, BED_SLEEP.z)); ud.goingToBed = true; }
+        else { final = 'sleepWait'; setRoute(p, queueWaitPos('sleep',p)); bubbleText = commentMap['sleep']; }
+      }
+      else if(state === 'chat_thinking') { ud.speed = 0; bubbleText = '...'; }
+      else if(state === 'chat_speaking') { ud.speed = 0; bubbleText = ud.lastReply || ''; }
+
+      ud.state = final;
+      // 独り言をセット
+      setBubbleText(p, bubbleText);
+    }
+
+    const clock = new THREE.Clock();
+    function beakWorldPos(p) {
+      if (!p) return new THREE.Vector3();
+      const forward = new THREE.Vector3(0,0,1).applyQuaternion(p.quaternion);
+      return p.position.clone().add(new THREE.Vector3(0,1.0,0)).add(forward.multiplyScalar(0.7));
+    }
+
+    function updatePenguin(p, dt) {
+      if (!p) return;
+      const ud = p.userData;
+      if (ud.mixer) ud.mixer.update(dt);
+      ud.timer += dt;
+
+      // チャット中はカメラの方を向く
+      if (ud.state.startsWith('chat')) {
+         const targetPos = new THREE.Vector3(camera.position.x, 0, camera.position.z);
+         const lookDir = targetPos.clone().sub(p.position).normalize();
+         const targetYaw = Math.atan2(lookDir.x, lookDir.z);
+         let rotDiff = targetYaw - p.rotation.y;
+         while (rotDiff > Math.PI) rotDiff -= Math.PI*2;
+         while (rotDiff < -Math.PI) rotDiff += Math.PI*2;
+         p.rotation.y += rotDiff * dt * 5.0;
+         
+         if (ud.state === 'chat_speaking' && ud.timer > 6.0) {
+             // 話し終わったら元の生活に戻る
+             setState(p, 'wander');
+         }
+         return;
+      }
+
+      // Wobble animation (walking)
+      if (ud.state !== 'sit' && ud.state !== 'sleep') { p.position.y = Math.max(0, Math.sin(performance.now()/1000*6)*0.03); }
+
+      if ([ 'wander','play','playBlocks','eat','window','pond','neco','playWait','playBlocksWait','eatWait','pondWait','necoWait','sleepWait' ].includes(ud.state) || (ud.state==='sleep' && ud.goingToBed)) {
+        const target = ud.target;
+        const v = new THREE.Vector3(target.x - p.position.x, 0, target.z - p.position.z);
+        const dist = Math.hypot(v.x, v.z);
+        if (dist > 0.02) {
+          v.normalize();
+          const speed = ud.speed * dt * 0.9;
+          p.position.addScaledVector(v, Math.min(speed, dist));
+          const yaw = Math.atan2(v.x, v.z);
+          p.rotation.y = yaw + HEADING_OFFSET;
+          p.rotation.z = Math.sin(performance.now()/1000*8)*0.05;
+        } else {
+          if (ud.way && ud.way.length) { ud.target.copy(ud.way.shift()); return; }
+          // Arrived logic
+          if (ud.state === 'wander') { if (ud.timer > 1.0) setState(p,'lounge'); }
+          else if (ud.state === 'play') {
+            if (!ud.arrived) { ud.arrived = true; ud.timer = 0; }
+            toys.children.forEach(t => { if (t.geometry && t.geometry.type === 'TorusGeometry') t.position.y = 0.35 + Math.sin(performance.now()/1000*6)*0.07; });
+            if (ud.timer > (1.0 + Math.random()*1.0)) { releaseResource('play'); chooseNextAction(p); }
+          }
+          else if (ud.state === 'playBlocks') {
+            if (!ud.arrived) { ud.arrived = true; ud.timer = 0; }
+            const wobble = Math.sin(performance.now()/1000 * 6) * 0.12; blocks.forEach(b => { b.rotation.y = wobble; });
+            if (ud.timer > (1.0 + Math.random()*1.0)) { blocks.forEach(b=>b.rotation.y=0); releaseResource('playBlocks'); chooseNextAction(p); }
+          }
+          else if (ud.state === 'eat') {
+            if (!ud.fish) { ud.fish = makeFish(); ud.fish.position.copy(dish.position).add(new THREE.Vector3(Math.random()*0.3, 0.2, Math.random()*0.3)); scene.add(ud.fish); }
+            else {
+              const beakPos = beakWorldPos(p);
+              ud.fish.position.lerp(beakPos, Math.min(1, dt*1.5));
+              if (ud.fish.position.distanceTo(beakPos) < 0.06) { scene.remove(ud.fish); ud.fish = null; releaseResource('eat'); chooseNextAction(p); }
+            }
+          }
+          else if (ud.state === 'sleep' && ud.goingToBed) { p.position.y = BED_SLEEP.y; p.rotation.y = Math.PI/2 + HEADING_OFFSET; ud.goingToBed = false; ud.timer = 0; }
+          else if (ud.state === 'neco') {
+             if (!ud.arrived) { ud.arrived = true; ud.timer = 0; }
+             if (ud.timer > 2.0) { releaseResource('neco'); chooseNextAction(p); }
+          }
+          else if (ud.state === 'window') {
+            p.rotation.y = Math.PI/2 + HEADING_OFFSET;
+            if (!ud.arrived) { ud.arrived = true; ud.timer = 0; }
+            if (ud.timer > 2.0) chooseNextAction(p);
+          }
+          else if (ud.state === 'pond') {
+            if (!ud.arrived) { ud.arrived = true; ud.timer = 0; spawnSplash(p.position.clone().setY(0.08), 8); }
+            p.position.y = Math.sin(performance.now()/1000 * 8) * 0.03;
+            if (ud.timer > 2.2) { p.position.y = 0; releaseResource('pond'); chooseNextAction(p); }
+          }
+        }
+      } else if (ud.state === 'lounge' || ud.state === 'sit') {
+        p.rotation.z = 0; if (ud.timer > (2 + Math.random()*3)) chooseNextAction(p);
+      } else if (ud.state === 'sleep') {
+        p.rotation.set(0, p.rotation.y, 0); p.rotation.x = Math.PI/2 * 0.8;
+        if (ud.timer > (4 + Math.random()*3)) setState(p,'wake');
+      } else if (ud.state === 'wake') {
+        p.rotation.x = THREE.MathUtils.damp(p.rotation.x, 0, 6, dt);
+        if (Math.abs(p.rotation.x) < 0.02) { p.rotation.x = 0; releaseResource('sleep'); chooseNextAction(p); }
+      }
+      p.position.x = THREE.MathUtils.clamp(p.position.x, bounds.xMin, bounds.xMax);
+      p.position.z = THREE.MathUtils.clamp(p.position.z, bounds.zMin, bounds.zMax);
+    }
+
+    // ---- Other Characters ----
+    let necoRef = null;
+    const mixers = [];
+    function fitAndFloorToHeight(obj, targetH){
+      const tmp = new THREE.Group(); tmp.add(obj); scene.add(tmp);
+      tmp.updateWorldMatrix(true,true);
+      const box = new THREE.Box3().setFromObject(tmp);
+      const size = new THREE.Vector3(); box.getSize(size);
+      const s = (size.y > 0 ? targetH / size.y : 1);
+      obj.scale.setScalar(s);
+      tmp.updateWorldMatrix(true,true);
+      const box2 = new THREE.Box3().setFromObject(tmp);
+      obj.position.y += -box2.min.y;
+      scene.remove(tmp);
+      return obj;
+    }
+    function spawnNeco(url, pos, targetH = 1.1){
+      gltfLoader.load(url, (gltf)=>{
+        const neco = new THREE.Group();
+        const model = gltf.scene;
+        model.traverse(o=>{ if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; } });
+        fitAndFloorToHeight(model, targetH);
+        neco.add(model);
+        neco.position.copy(pos);
+        neco.rotation.y = Math.PI / 2;
+        scene.add(neco);
+        neco.userData = neco.userData || {};
+        const bb = new THREE.Box3().setFromObject(model);
+        const h = Math.max(0.001, bb.max.y - bb.min.y);
+        neco.userData.bubbleOffsetY = Math.max(h * 1.2, h + 0.15);
+        necoRef = neco;
+        if (RES.neco) RES.neco.pos = neco.position.clone();
+        if (gltf.animations && gltf.animations.length){
+          const mixer = new THREE.AnimationMixer(model);
+          gltf.animations.forEach(clip=> mixer.clipAction(clip).setLoop(THREE.LoopRepeat, Infinity).play());
+          mixers.push(mixer);
+        }
+      }, undefined, (err)=>console.warn('neco.glb load error', err));
+    }
+
+    spawn('Pen.glb', new THREE.Vector3(-1.2,0,0));
+    spawnNeco('neco.glb', new THREE.Vector3(-11.2, 0, 2.0), 1.3);
+
+
+    // ---- Loop ----
+    function animate(){
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      const t = performance.now()/1000;
+
+      for (const p of penguins) updatePenguin(p, dt);
+      for (const m of mixers) m.update(dt);
+
+      // mobile fish wobble
+      mf1.rotation.y = Math.sin(t*1.6)*0.4;
+      mf2.rotation.y = Math.cos(t*1.4)*0.4;
+      mf3.rotation.y = Math.sin(t*1.8+0.7)*0.4;
+
+      for (const p of penguins) updateBubblePositionFor(p);
+      if (necoRef) {
+          // ネコもたまに喋る（簡易）
+          if (Math.random() < 0.002) setBubbleText(necoRef, 'にゃあ');
+          else if (Math.random() < 0.005 && necoRef.userData.bubbleEl && necoRef.userData.bubbleEl.textContent === 'にゃあ') setBubbleText(necoRef, '');
+          updateBubblePositionFor(necoRef);
+      }
+      
+      // droplets
+      for (let i=droplets.length-1; i>=0; i--) {
+        const d = droplets[i];
+        d.userData.vel.y -= 3.5 * dt;
+        d.position.addScaledVector(d.userData.vel, dt);
+        d.userData.life -= dt;
+        d.material.opacity = Math.max(0, d.userData.life / 0.7);
+        if (d.userData.life <= 0 || d.position.y <= 0.02) { scene.remove(d); droplets.splice(i,1); }
+      }
+      renderer.render(scene, camera);
+    }
+    animate();
+
+
+    // ---- Chat Logic ----
+    const chatInput = $('chat-input');
+    const chatLog = $('chat-log');
+    const sendBtn = $('send-btn');
+    const form = $('input-area');
+
+    function addMessage(text, type) {
+      const div = document.createElement('div');
+      div.className = `msg ${type}`;
+      div.textContent = text;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    async function callGeminiAPI(userText) {
+      try {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: userText })
+        });
+        if (!response.ok) throw new Error('Network response was not ok');
+        const data = await response.json();
+        return data.reply;
+      } catch (error) {
+        console.error("Fetch error:", error);
+        return "（つうしんえらーだぺん...）";
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = chatInput.value.trim();
+      if (!text) return;
+
+      // User投稿
+      addMessage(text, 'user');
+      chatInput.value = ''; chatInput.disabled = true; sendBtn.disabled = true;
+
+      // ペンギンをチャットモードへ（独り言停止・こっち向く）
+      if (penguin) setState(penguin, 'chat_thinking');
+
+      // API呼び出し
+      const reply = await callGeminiAPI(text);
+
+      // 返答
+      addMessage(reply, 'penguin');
+      if (penguin) {
+        penguin.userData.lastReply = reply;
+        setState(penguin, 'chat_speaking');
+      }
+
+      chatInput.disabled = false; sendBtn.disabled = false; chatInput.focus();
+    });
+
+    function spawn(url, start){
+      loadPenguin(url)
+        .then((g)=>{ if (start) g.position.copy(start); scene.add(g); penguins.push(g); if (!penguin) penguin = g; setState(g,'wander'); })
+        .catch(()=>{ /*fallback*/ });
+    }
+
+    // ---- Console helpers ----
+    window.__penguin = { scene, camera, setState, chooseNextAction, get penguin(){ return penguin; } };
+    setStatus('ready');
+  </script>
+</body>
+</html>
