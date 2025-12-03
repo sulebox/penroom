@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <title>Penguin Room — Shifupen</title>
+  <title>Penguin Room — Shifupen & Friends</title>
   <style>
     /* --- ベーススタイル --- */
     html, body { height: 100%; margin: 0; background: #f6e6c9; touch-action: manipulation; -webkit-tap-highlight-color: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Meiryo, sans-serif; overflow: hidden; }
@@ -123,7 +123,6 @@
       aspect = window.innerWidth / window.innerHeight;
       const isMobile = window.innerWidth < 800;
 
-      // ★設定値エリア
       const mobileSettings = { 
         zoom: 21, // スマホ用：この数字で「横の広さ」を決めます
         posX: 12, posY: 10, posZ: 14, 
@@ -142,16 +141,9 @@
       camera.lookAt(s.lookX, s.lookY, s.lookZ);
 
       let frustumSize;
-
       if (isMobile) {
-        // スマホ（縦長）の場合：
-        // 「zoom」の数値をアスペクト比で割って、横幅が確保できるように計算します
         frustumSize = s.zoom / aspect;
       } else {
-        // PC（横長）の場合：
-        // ★修正点：邪魔な Math.max を削除しました。
-        // 「zoom」の数値がそのまま画面の高さになります。
-        // 数字を「小さく」するとズームイン、「大きく」するとズームアウトします。
         frustumSize = s.zoom;
       }
 
@@ -312,9 +304,7 @@
     gltfLoader.setKTX2Loader(ktx2);
     gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 
-    // ★修正: 行動範囲を「右壁(X=9)の内側まで」に制限
     const bounds = { xMin: -16, xMax: 8.5, zMin: -7, zMax: 15 };
-    
     const targetHeight = 2.2;
     const HEADING_OFFSET = Math.PI;
 
@@ -503,6 +493,23 @@
       if ([ 'wander','play','playBlocks','eat','window','pond','neco','playWait','playBlocksWait','eatWait','pondWait','necoWait','sleepWait' ].includes(ud.state) || (ud.state==='sleep' && ud.goingToBed)) {
         const target = ud.target;
         const v = new THREE.Vector3(target.x - p.position.x, 0, target.z - p.position.z);
+        // Separation logic
+        const sep = new THREE.Vector3();
+        for (const other of penguins) {
+          if (other === p) continue;
+          const dx = p.position.x - other.position.x;
+          const dz = p.position.z - other.position.z;
+          const d2 = dx*dx + dz*dz;
+          const minD = 1.2;
+          if (d2 > 1e-4 && d2 < minD*minD) {
+            const d = Math.sqrt(d2);
+            const f = (minD - d) / minD;
+            sep.x += (dx / d) * f;
+            sep.z += (dz / d) * f;
+          }
+        }
+        v.add(sep.multiplyScalar(0.8));
+
         const dist = Math.hypot(v.x, v.z);
         if (dist > 0.02) {
           v.normalize();
@@ -601,7 +608,10 @@
       }, undefined, (err)=>console.warn('neco.glb load error', err));
     }
 
-    spawn('Pen.glb', new THREE.Vector3(-1.2,0,0));
+    // ★修正: 3羽のペンギンをスポーンさせる (isMainフラグを使用)
+    spawn('Pen.glb', new THREE.Vector3(-1.2, 0, 0), true);
+    spawn('Pen_b.glb', new THREE.Vector3(1.0, 0, -2.0), false);
+    spawn('Pen_r.glb', new THREE.Vector3(-3.0, 0, 2.0), false);
     spawnNeco('neco.glb', new THREE.Vector3(-11.2, 0, 2.0), 1.3);
 
 
@@ -676,6 +686,7 @@
       addMessage(text, 'user');
       chatInput.value = ''; chatInput.disabled = true; sendBtn.disabled = true;
 
+      // チャット反応は penguin (シフペン) だけ
       if (penguin) setState(penguin, 'chat_thinking');
 
       const reply = await callGeminiAPI(text);
@@ -689,10 +700,17 @@
       chatInput.disabled = false; sendBtn.disabled = false; chatInput.focus();
     });
 
-    function spawn(url, start){
+    // ★修正: spawn関数に isMain 引数を追加
+    function spawn(url, start, isMain = false){
       loadPenguin(url)
-        .then((g)=>{ if (start) g.position.copy(start); scene.add(g); penguins.push(g); if (!penguin) penguin = g; setState(g,'wander'); })
-        .catch(()=>{ /*fallback*/ });
+        .then((g)=>{ 
+          if (start) g.position.copy(start); 
+          scene.add(g); 
+          penguins.push(g); 
+          if (isMain) penguin = g; // 主役だけ変数に入れる
+          setState(g,'wander'); 
+        })
+        .catch((e)=>{ console.warn('failed load', url, e); });
     }
 
     window.__penguin = { scene, camera, setState, chooseNextAction, get penguin(){ return penguin; } };
