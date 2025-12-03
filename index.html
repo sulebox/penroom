@@ -134,7 +134,7 @@
         posX: 14, posY: 10, posZ: 14, 
         lookX: 0, lookY: -5, lookZ: 0 
       };
-
+      
       const s = isMobile ? mobileSettings : pcSettings;
 
       camera.position.set(s.posX, s.posY, s.posZ);
@@ -608,10 +608,12 @@
       }, undefined, (err)=>console.warn('neco.glb load error', err));
     }
 
-    // ★修正: 3羽のペンギンをスポーンさせる (isMainフラグを使用)
-    spawn('Pen.glb', new THREE.Vector3(-1.2, 0, 0), true);
+    // ★修正: 5羽のペンギンをスポーンさせる
+    spawn('Pen.glb', new THREE.Vector3(-1.2, 0, 0), true); // シフペン(主役)
     spawn('Pen_b.glb', new THREE.Vector3(1.0, 0, -2.0), false);
     spawn('Pen_r.glb', new THREE.Vector3(-3.0, 0, 2.0), false);
+    spawn('Pen_y.glb', new THREE.Vector3(2.5, 0, 3.0), false); // 黄色(New)
+    spawn('Pen_g.glb', new THREE.Vector3(-4.0, 0, -1.0), false); // 緑(New)
     spawnNeco('neco.glb', new THREE.Vector3(-11.2, 0, 2.0), 1.3);
 
 
@@ -700,7 +702,7 @@
       chatInput.disabled = false; sendBtn.disabled = false; chatInput.focus();
     });
 
-    // ★修正: spawn関数に isMain 引数を追加
+    // spawn関数: isMain 引数を追加
     function spawn(url, start, isMain = false){
       loadPenguin(url)
         .then((g)=>{ 
