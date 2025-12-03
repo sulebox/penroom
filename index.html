@@ -16,18 +16,17 @@
     .bubble { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -100%); padding: 6px 10px; background: rgba(255,255,255,.95); border-radius: 12px; border: 1px solid #ccc; box-shadow: 0 4px 16px rgba(0,0,0,.12); font-size: 12px; pointer-events: none; transition: opacity .2s; z-index: 5; white-space: nowrap; }
     .bubble::after { content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); border-width: 6px 5px 0; border-style: solid; border-color: rgba(255,255,255,0.95) transparent transparent transparent; }
 
-    /* --- チャットUI (下部に固定) --- */
+    /* --- チャットUI --- */
     #chat-interface {
       position: fixed; bottom: 0; left: 0; width: 100%; height: 35%;
       pointer-events: none; z-index: 20;
     }
-    /* ★追加: 幅を制限して中央寄せするためのコンテナ */
     .chat-container {
       position: relative;
       width: 100%;
-      max-width: 960px; /* 参考サイトくらいの最大幅 */
+      max-width: 960px;
       height: 100%;
-      margin: 0 auto; /* 中央寄せ */
+      margin: 0 auto;
       display: flex; flex-direction: column; justify-content: flex-end;
       pointer-events: none;
     }
@@ -38,7 +37,6 @@
       background: linear-gradient(to top, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 100%);
       mask-image: linear-gradient(to bottom, transparent, black 20%);
       -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%);
-      /* 入力エリアと重ならないように下部に余白を追加 */
       padding-bottom: 80px; 
     }
     .msg { margin-bottom: 8px; font-size: 14px; line-height: 1.4; max-width: 80%; padding: 8px 12px; border-radius: 12px; animation: fadeIn 0.3s ease; }
@@ -51,7 +49,6 @@
       background: #fff; padding: 10px 15px;
       display: flex; gap: 10px; align-items: center;
       box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-      /* ★修正: コンテナの下部に固定 */
       position: absolute;
       bottom: 0;
       left: 0;
@@ -97,14 +94,12 @@
   </script>
 
   <script type="module">
-    // ---- Imports ----
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
     import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
     import { DRACOLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/DRACOLoader.js';
     import { KTX2Loader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/KTX2Loader.js';
     import { MeshoptDecoder } from 'https://cdn.jsdelivr.net/npm/meshoptimizer@0.20.0/meshopt_decoder.module.js';
     
-    // ---- Helpers ----
     const $ = (id) => document.getElementById(id);
     const setStatus = (m) => { const st=$('status'); if(st){ st.textContent = m; } console.log(m); };
 
@@ -136,7 +131,7 @@
       };
       
       const pcSettings = { 
-        zoom: 25, // PC用：この数字で「縦の広さ」を決めます（※制限を外したので効くようになります！）
+        zoom: 22, // PC用：この数字で「縦の広さ」を決めます（※制限を外したので効くようになります！）
         posX: 14, posY: 10, posZ: 14, 
         lookX: 0, lookY: -5, lookZ: 0 
       };
@@ -176,7 +171,7 @@
     dir.position.set(5, 10, 2);
     scene.add(dir);
 
-    // ---- Room (オリジナルのお部屋構造) ----
+    // ---- Room ----
     const room = new THREE.Group();
     scene.add(room);
     const floorGeo = new THREE.PlaneGeometry(18, 14);
@@ -189,10 +184,8 @@
     const wallMat = new THREE.MeshStandardMaterial({ color: 0xF7CD8F });
     const mkWall = (w,h,t) => new THREE.Mesh(new THREE.BoxGeometry(w,h,t), wallMat);
 
-    // 壁
     const back = mkWall(18, wallH, wallT); back.position.set(0, wallH/2, -7); room.add(back);
 
-    // 右壁＋窓
     const rightGroup = new THREE.Group(); room.add(rightGroup); const rightX = 9;
     const beamMat = new THREE.MeshStandardMaterial({ color: 0xE9A86B });
     const beamT = wallT;
@@ -204,11 +197,10 @@
     const rightBottomWall = new THREE.Mesh(new THREE.BoxGeometry(beamT, 0.5, 14), wallMat); rightBottomWall.position.set(rightX, 1.0, 0); room.add(rightBottomWall);
 
     updateCameraMode();
-    // ガラス壁
     const glassMat = new THREE.MeshPhysicalMaterial({ color: 0xA7D0FF, transmission: 0.9, thickness: 0.02, roughness: 0.1, transparent: true, opacity: 0.6 });
     const glass = new THREE.Mesh(new THREE.BoxGeometry(0.02, 2.2, 13), glassMat); glass.position.set(rightX - 0.02, 2.9, 0); rightGroup.add(glass);
 
-    // ---- Garden (拡張) ----
+    // ---- Garden ----
     const garden = new THREE.Group(); scene.add(garden);
     const lawnMat = new THREE.MeshStandardMaterial({ color: 0xCDE7B0, roughness: 0.95 });
     const frontLawn = new THREE.Mesh(new THREE.PlaneGeometry(18, 8), lawnMat); frontLawn.rotation.x = -Math.PI/2; frontLawn.position.set(0, 0, 11); garden.add(frontLawn);
@@ -277,7 +269,7 @@
     const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.15, 0.45), new THREE.MeshStandardMaterial({ color: 0xffffff })); pillow.position.set(bedX - 1.3, 0.5, bedZ + 0.0); pillow.rotation.y = Math.PI / 2; bed.add(pillow);
     const BED_SLEEP = { x: bedX - 0.9, z: bedZ - 0.45, y: 0.55 };
 
-    // ---- Mobile toy (モビール) ----
+    // ---- Mobile toy ----
     const mobile = new THREE.Group(); scene.add(mobile); mobile.position.set(-5, 3.8, -4.5);
     const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,1.2,12), new THREE.MeshStandardMaterial({ color: 0xd7ccc8 })); rod.rotation.z = Math.PI/2; mobile.add(rod);
     const stringMat = new THREE.MeshStandardMaterial({ color: 0xd7ccc8 });
@@ -320,11 +312,13 @@
     gltfLoader.setKTX2Loader(ktx2);
     gltfLoader.setMeshoptDecoder(MeshoptDecoder);
 
-    const bounds = { xMin: -16, xMax: 17, zMin: -7, zMax: 15 };
+    // ★修正: 行動範囲を「右壁(X=9)の内側まで」に制限
+    const bounds = { xMin: -16, xMax: 8.5, zMin: -7, zMax: 15 };
+    
     const targetHeight = 2.2;
     const HEADING_OFFSET = Math.PI;
 
-    // ---- Bubbles (独り言の辞書) ----
+    // ---- Bubbles ----
     const commentMap = {
       wander: 'おさんぽしよっと',
       lounge: 'ちょとつかれた',
@@ -339,17 +333,9 @@
       neco:   'ネコみよっと'
     };
     function ensureBubble(p){ if (!p.userData.bubbleEl) { const el = document.createElement('div'); el.className='bubble'; document.body.appendChild(el); p.userData.bubbleEl = el; } return p.userData.bubbleEl; }
-    
-    // バブルにテキストをセットする（状態に応じた独り言、またはチャットの返答）
-    function setBubbleText(p, text) {
-        const el = ensureBubble(p);
-        el.textContent = text || '';
-        el.style.opacity = text ? 1 : 0;
-    }
-
+    function setBubbleText(p, text) { const el = ensureBubble(p); el.textContent = text || ''; el.style.opacity = text ? 1 : 0; }
     function updateBubblePositionFor(p){
       const el = p.userData.bubbleEl; if (!el) return;
-      // 表示がないときは計算しない
       if (el.style.opacity == 0) return;
       const offY = (p.userData && typeof p.userData.bubbleOffsetY === 'number') ? p.userData.bubbleOffsetY : 2.6;
       const world = p.position.clone().add(new THREE.Vector3(0, offY, 0));
@@ -484,7 +470,6 @@
       else if(state === 'chat_speaking') { ud.speed = 0; bubbleText = ud.lastReply || ''; }
 
       ud.state = final;
-      // 独り言をセット
       setBubbleText(p, bubbleText);
     }
 
@@ -501,25 +486,18 @@
       if (ud.mixer) ud.mixer.update(dt);
       ud.timer += dt;
 
-      // チャット中はカメラの方を向く
       if (ud.state.startsWith('chat')) {
          const targetPos = new THREE.Vector3(camera.position.x, 0, camera.position.z);
          const lookDir = targetPos.clone().sub(p.position).normalize();
          const targetYaw = Math.atan2(lookDir.x, lookDir.z) + HEADING_OFFSET;
-         
          let rotDiff = targetYaw - p.rotation.y;
          while (rotDiff > Math.PI) rotDiff -= Math.PI*2;
          while (rotDiff < -Math.PI) rotDiff += Math.PI*2;
          p.rotation.y += rotDiff * dt * 5.0;
-         
-         if (ud.state === 'chat_speaking' && ud.timer > 6.0) {
-             // 話し終わったら元の生活に戻る
-             setState(p, 'wander');
-         }
+         if (ud.state === 'chat_speaking' && ud.timer > 6.0) setState(p, 'wander');
          return;
       }
 
-      // Wobble animation (walking)
       if (ud.state !== 'sit' && ud.state !== 'sleep') { p.position.y = Math.max(0, Math.sin(performance.now()/1000*6)*0.03); }
 
       if ([ 'wander','play','playBlocks','eat','window','pond','neco','playWait','playBlocksWait','eatWait','pondWait','necoWait','sleepWait' ].includes(ud.state) || (ud.state==='sleep' && ud.goingToBed)) {
@@ -535,7 +513,6 @@
           p.rotation.z = Math.sin(performance.now()/1000*8)*0.05;
         } else {
           if (ud.way && ud.way.length) { ud.target.copy(ud.way.shift()); return; }
-          // Arrived logic
           if (ud.state === 'wander') { if (ud.timer > 1.0) setState(p,'lounge'); }
           else if (ud.state === 'play') {
             if (!ud.arrived) { ud.arrived = true; ud.timer = 0; }
@@ -637,20 +614,17 @@
       for (const p of penguins) updatePenguin(p, dt);
       for (const m of mixers) m.update(dt);
 
-      // mobile fish wobble
       mf1.rotation.y = Math.sin(t*1.6)*0.4;
       mf2.rotation.y = Math.cos(t*1.4)*0.4;
       mf3.rotation.y = Math.sin(t*1.8+0.7)*0.4;
 
       for (const p of penguins) updateBubblePositionFor(p);
       if (necoRef) {
-          // ネコもたまに喋る（簡易）
           if (Math.random() < 0.002) setBubbleText(necoRef, 'にゃあ');
           else if (Math.random() < 0.005 && necoRef.userData.bubbleEl && necoRef.userData.bubbleEl.textContent === 'にゃあ') setBubbleText(necoRef, '');
           updateBubblePositionFor(necoRef);
       }
       
-      // droplets
       for (let i=droplets.length-1; i>=0; i--) {
         const d = droplets[i];
         d.userData.vel.y -= 3.5 * dt;
@@ -699,17 +673,13 @@
       const text = chatInput.value.trim();
       if (!text) return;
 
-      // User投稿
       addMessage(text, 'user');
       chatInput.value = ''; chatInput.disabled = true; sendBtn.disabled = true;
 
-      // ペンギンをチャットモードへ（独り言停止・こっち向く）
       if (penguin) setState(penguin, 'chat_thinking');
 
-      // API呼び出し
       const reply = await callGeminiAPI(text);
 
-      // 返答
       addMessage(reply, 'penguin');
       if (penguin) {
         penguin.userData.lastReply = reply;
@@ -725,7 +695,6 @@
         .catch(()=>{ /*fallback*/ });
     }
 
-    // ---- Console helpers ----
     window.__penguin = { scene, camera, setState, chooseNextAction, get penguin(){ return penguin; } };
     setStatus('ready');
   </script>
