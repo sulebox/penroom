@@ -456,7 +456,7 @@
          while (rotDiff < -Math.PI) rotDiff += Math.PI*2;
          p.rotation.y += rotDiff * dt * 5.0;
          
-         if (ud.state === 'chat_speaking' && ud.timer > 5.0) {
+         if (ud.state === 'chat_speaking' && ud.timer > 6.0) {
              // 話し終わったら元の生活に戻る
              setState(p, 'wander');
          }
