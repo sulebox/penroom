@@ -100,14 +100,14 @@
     let aspect = window.innerWidth / window.innerHeight;
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
     camera.position.set(14, 16, 14);
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(3, 0, 0);
 
     function updateCameraMode(){
       aspect = window.innerWidth / window.innerHeight;
       
       // ★修正: ネコが見えるように表示範囲を大幅に拡大 (zoom out)
-      const baseHeight = 16; 
-      const baseWidth = 24; // ここの数値を大きくするほど横に広く映ります
+      const baseHeight = 14; 
+      const baseWidth = 20; // ここの数値を大きくするほど横に広く映ります
 
       const frustumSize = Math.max(baseHeight, baseWidth / aspect);
 
