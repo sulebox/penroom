@@ -128,15 +128,37 @@
       aspect = window.innerWidth / window.innerHeight;
       const isMobile = window.innerWidth < 800;
 
-      const mobileSettings = { zoom: 21, posX: 12, posY: 10, posZ: 14, lookX: -2, lookY: -5, lookZ: 0 };
-      const pcSettings = { zoom: 21, posX: 14, posY: 10, posZ: 14, lookX: 0, lookY: -5, lookZ: 0 };
+      // ★設定値エリア
+      const mobileSettings = { 
+        zoom: 21, // スマホ用：この数字で「横の広さ」を決めます
+        posX: 12, posY: 10, posZ: 14, 
+        lookX: -2, lookY: -5, lookZ: 0 
+      };
+      
+      const pcSettings = { 
+        zoom: 22, // PC用：この数字で「縦の広さ」を決めます（※制限を外したので効くようになります！）
+        posX: 14, posY: 10, posZ: 14, 
+        lookX: 0, lookY: -5, lookZ: 0 
+      };
 
       const s = isMobile ? mobileSettings : pcSettings;
 
       camera.position.set(s.posX, s.posY, s.posZ);
       camera.lookAt(s.lookX, s.lookY, s.lookZ);
 
-      const frustumSize = Math.max(32, s.zoom / aspect);
+      let frustumSize;
+
+      if (isMobile) {
+        // スマホ（縦長）の場合：
+        // 「zoom」の数値をアスペクト比で割って、横幅が確保できるように計算します
+        frustumSize = s.zoom / aspect;
+      } else {
+        // PC（横長）の場合：
+        // ★修正点：邪魔な Math.max を削除しました。
+        // 「zoom」の数値がそのまま画面の高さになります。
+        // 数字を「小さく」するとズームイン、「大きく」するとズームアウトします。
+        frustumSize = s.zoom;
+      }
 
       camera.left = -frustumSize * aspect / 2;
       camera.right = frustumSize * aspect / 2;
