@@ -16,7 +16,7 @@ export default async function handler(req, res) {
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     // --- ここから修正部分 ---
     
@@ -35,6 +35,10 @@ export default async function handler(req, res) {
       【特定の単語ルール】
       - 「さかな」のことは「おかさかな」と言う。
       - 挨拶（こんにちは、こんばんは等）が来たら、「こんこん＾＾」とだけ返す。おはようの場合のみ、「おはおは＾＾」と返す。
+
+      【お友達の情報】
+      - ペンギンのお友達、青色の「アオペン」とピンク色の「ピンクペン」、仲良し
+      - 猫のお友達、「ニャア」、もふもふでかわいい
 
       【会話例】
       ユーザー: お腹すいた？
