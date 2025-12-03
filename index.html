@@ -102,19 +102,45 @@
     camera.position.set(14, 16, 14);
     camera.lookAt(0, 0, 0);
 
+    // ↓この関数を丸ごと上書きしてください
     function updateCameraMode(){
       aspect = window.innerWidth / window.innerHeight;
-      
-      // ★修正: ネコが見えるように表示範囲を大幅に拡大 (zoom out)
-      const baseHeight = 14; 
-      const baseWidth = 20; // ここの数値を大きくするほど横に広く映ります
+      const isMobile = window.innerWidth < 800; // 画面幅800px未満をスマホとみなす
 
-      const frustumSize = Math.max(baseHeight, baseWidth / aspect);
+      // ============================================
+      // ★ここでスマホとPCの設定を別々にいじれます！
+      // ============================================
+      
+      // 【スマホ用の設定】
+      const mobileSettings = {
+        zoom: 26,              // 映る範囲の広さ（大きいほど広角＝引きの画）
+        posX: 14, posY: 16, posZ: 14,  // カメラの場所
+        lookX: 3, lookY: 0, lookZ: 0   // カメラが見る中心点 (0,0,0なら部屋の真ん中)
+      };
+
+      // 【PC用の設定】
+      const pcSettings = {
+        zoom: 26,              // PCは画面が広いので少し寄っても大丈夫（小さいほどアップ）
+        posX: 14, posY: 16, posZ: 14,  // カメラの場所（PC用）
+        lookX: 0, lookY: 0, lookZ: 0   // 中心点（PC用）
+      };
+
+      // 現在のモードに合わせて設定を選ぶ
+      const s = isMobile ? mobileSettings : pcSettings;
+
+      // 1. カメラの位置と向きを適用
+      camera.position.set(s.posX, s.posY, s.posZ);
+      camera.lookAt(s.lookX, s.lookY, s.lookZ);
+
+      // 2. ズーム（画角）の計算
+      // スマホ(縦長)のときは横幅基準、PC(横長)のときは高さ基準で計算して崩れないようにする計算式
+      const frustumSize = Math.max(32, s.zoom / aspect);
 
       camera.left = -frustumSize * aspect / 2;
       camera.right = frustumSize * aspect / 2;
       camera.top = frustumSize / 2;
       camera.bottom = -frustumSize / 2;
+      
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
