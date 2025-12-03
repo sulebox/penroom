@@ -103,8 +103,14 @@
     camera.lookAt(0, 0, 0);
 
     function updateCameraMode(){
-      const frustumSize = 22;
       aspect = window.innerWidth / window.innerHeight;
+      
+      // ★修正: ネコが見えるように表示範囲を大幅に拡大 (zoom out)
+      const baseHeight = 32; 
+      const baseWidth = 46; // ここの数値を大きくするほど横に広く映ります
+
+      const frustumSize = Math.max(baseHeight, baseWidth / aspect);
+
       camera.left = -frustumSize * aspect / 2;
       camera.right = frustumSize * aspect / 2;
       camera.top = frustumSize / 2;
@@ -449,7 +455,7 @@
       if (ud.state.startsWith('chat')) {
          const targetPos = new THREE.Vector3(camera.position.x, 0, camera.position.z);
          const lookDir = targetPos.clone().sub(p.position).normalize();
-         const targetYaw = Math.atan2(lookDir.x, lookDir.z) + HEADING_OFFSET; // ★修正: HEADING_OFFSETを足す
+         const targetYaw = Math.atan2(lookDir.x, lookDir.z) + HEADING_OFFSET;
          
          let rotDiff = targetYaw - p.rotation.y;
          while (rotDiff > Math.PI) rotDiff -= Math.PI*2;
