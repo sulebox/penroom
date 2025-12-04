@@ -18,7 +18,17 @@ export default async function handler(req, res) {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // --- ここから修正部分 ---
+    // ★追加: 30%の確率で「質問モード」にするサイコロを振る
+    const shouldAsk = Math.random() < 0.3; 
+    
+    let extraInstruction = "";
+    if (shouldAsk) {
+      extraInstruction = `
+      【今回の追加ルール】
+      返事のあとに、ユーザーへ「みじかいしつもん」をひとつだけして。
+      （例：「きょうなにするの？」「おかさかなすき？」）
+      `;
+    }
     
     const prompt = `
       あなたは「シフペン」という名前の自由奔放なペンギンのマスコットです。
